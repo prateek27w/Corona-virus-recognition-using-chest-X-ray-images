@@ -1,1 +1,6 @@
+COVID 19 DETECTION USING CHEST X RAY IMAGES.
+Aim of the project
 
+To Design and development of a deep-learning algorithm to detect covid-19 disease in chest using X-ray images by pattern recognition technique and its classification.
+
+Importing required libraries and packages.

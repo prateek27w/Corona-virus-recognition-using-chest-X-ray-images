@@ -1,0 +1,766 @@
+from imutils import paths
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+import argparse
+import os
+import shutil
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.layers import AveragePooling2D
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import Flatten
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.utils import to_categorical
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.model_selection import train_test_split
+Importing our image dataset
+
+In [2]:
+dataset= "D:/chest xray/Data"
+Define learning rate and batch size.
+
+In [3]:
+INIT_LR = 1e-3
+EPOCHS = 10
+BS = 8
+In [4]:
+args={}
+args["dataset"]=dataset
+In [5]:
+iPaths = list(paths.list_images(args["dataset"]))  #image paths
+data = []
+labels = []
+for iPath in iPaths:
+    label = iPath.split(os.path.sep)[-2]   #split the image paths
+    image = cv2.imread(iPath)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) #Convert images into RGB Channel
+    image = cv2.resize(image, (224, 224))  #Resizing the images
+    data.append(image)
+    labels.append(label)
+data = np.array(data) / 255.0
+labels = np.array(labels)
+In [15]:
+image.shape
+Out[15]:
+(224, 224, 3)
+In [14]:
+data
+Out[14]:
+array([[[[0.52156863, 0.52156863, 0.52156863],
+         [0.47843137, 0.47843137, 0.47843137],
+         [0.45098039, 0.45098039, 0.45098039],
+         ...,
+         [0.5254902 , 0.5254902 , 0.5254902 ],
+         [0.52156863, 0.52156863, 0.52156863],
+         [0.99607843, 0.99607843, 0.99607843]],
+
+        [[0.41568627, 0.41568627, 0.41568627],
+         [0.36470588, 0.36470588, 0.36470588],
+         [0.34509804, 0.34509804, 0.34509804],
+         ...,
+         [0.49411765, 0.49411765, 0.49411765],
+         [0.48627451, 0.48627451, 0.48627451],
+         [0.99607843, 0.99607843, 0.99607843]],
+
+        [[0.21568627, 0.21568627, 0.21568627],
+         [0.18039216, 0.18039216, 0.18039216],
+         [0.18823529, 0.18823529, 0.18823529],
+         ...,
+         [0.4745098 , 0.4745098 , 0.4745098 ],
+         [0.45490196, 0.45490196, 0.45490196],
+         [0.99607843, 0.99607843, 0.99607843]],
+
+        ...,
+
+        [[0.96862745, 0.96862745, 0.96862745],
+         [0.95294118, 0.95294118, 0.95294118],
+         [0.94901961, 0.94901961, 0.94901961],
+         ...,
+         [0.84313725, 0.84313725, 0.84313725],
+         [0.81960784, 0.81960784, 0.81960784],
+         [0.99607843, 0.99607843, 0.99607843]],
+
+        [[0.96078431, 0.96078431, 0.96078431],
+         [0.95294118, 0.95294118, 0.95294118],
+         [0.94901961, 0.94901961, 0.94901961],
+         ...,
+         [0.84705882, 0.84705882, 0.84705882],
+         [0.83529412, 0.83529412, 0.83529412],
+         [0.99607843, 0.99607843, 0.99607843]],
+
+        [[0.96078431, 0.96078431, 0.96078431],
+         [0.95294118, 0.95294118, 0.95294118],
+         [0.94901961, 0.94901961, 0.94901961],
+         ...,
+         [0.85098039, 0.85098039, 0.85098039],
+         [0.83921569, 0.83921569, 0.83921569],
+         [0.99607843, 0.99607843, 0.99607843]]],
+
+
+       [[[0.2       , 0.2       , 0.2       ],
+         [0.20392157, 0.20392157, 0.20392157],
+         [0.19607843, 0.19607843, 0.19607843],
+         ...,
+         [0.19215686, 0.19215686, 0.19215686],
+         [0.19215686, 0.19215686, 0.19215686],
+         [0.19215686, 0.19215686, 0.19215686]],
+
+        [[0.2       , 0.2       , 0.2       ],
+         [0.2       , 0.2       , 0.2       ],
+         [0.2       , 0.2       , 0.2       ],
+         ...,
+         [0.19215686, 0.19215686, 0.19215686],
+         [0.18823529, 0.18823529, 0.18823529],
+         [0.19215686, 0.19215686, 0.19215686]],
+
+        [[0.20392157, 0.20392157, 0.20392157],
+         [0.20392157, 0.20392157, 0.20392157],
+         [0.2       , 0.2       , 0.2       ],
+         ...,
+         [0.19215686, 0.19215686, 0.19215686],
+         [0.19215686, 0.19215686, 0.19215686],
+         [0.19215686, 0.19215686, 0.19215686]],
+
+        ...,
+
+        [[0.67843137, 0.67843137, 0.67843137],
+         [0.67843137, 0.67843137, 0.67843137],
+         [0.68235294, 0.68235294, 0.68235294],
+         ...,
+         [0.59607843, 0.59607843, 0.59607843],
+         [0.59607843, 0.59607843, 0.59607843],
+         [0.58431373, 0.58431373, 0.58431373]],
+
+        [[0.67843137, 0.67843137, 0.67843137],
+         [0.68627451, 0.68627451, 0.68627451],
+         [0.68627451, 0.68627451, 0.68627451],
+         ...,
+         [0.6       , 0.6       , 0.6       ],
+         [0.59215686, 0.59215686, 0.59215686],
+         [0.58039216, 0.58039216, 0.58039216]],
+
+        [[0.67058824, 0.67058824, 0.67058824],
+         [0.67843137, 0.67843137, 0.67843137],
+         [0.68627451, 0.68627451, 0.68627451],
+         ...,
+         [0.60784314, 0.60784314, 0.60784314],
+         [0.6       , 0.6       , 0.6       ],
+         [0.59215686, 0.59215686, 0.59215686]]],
+
+
+       [[[0.17254902, 0.16470588, 0.16862745],
+         [0.20784314, 0.2       , 0.20392157],
+         [0.22352941, 0.21568627, 0.21960784],
+         ...,
+         [0.36078431, 0.36078431, 0.36078431],
+         [0.28235294, 0.28235294, 0.28235294],
+         [0.21176471, 0.20392157, 0.21568627]],
+
+        [[0.21176471, 0.20392157, 0.20784314],
+         [0.21960784, 0.21176471, 0.21568627],
+         [0.23137255, 0.22352941, 0.23137255],
+         ...,
+         [0.25882353, 0.25098039, 0.2627451 ],
+         [0.27843137, 0.2745098 , 0.28235294],
+         [0.27843137, 0.28235294, 0.29019608]],
+
+        [[0.21176471, 0.20392157, 0.21568627],
+         [0.22352941, 0.22352941, 0.23137255],
+         [0.23529412, 0.23529412, 0.23529412],
+         ...,
+         [0.35686275, 0.35686275, 0.36470588],
+         [0.24313725, 0.24313725, 0.25098039],
+         [0.18431373, 0.17647059, 0.18823529]],
+
+        ...,
+
+        [[0.2745098 , 0.2745098 , 0.28235294],
+         [0.29411765, 0.29411765, 0.30196078],
+         [0.27058824, 0.27058824, 0.27843137],
+         ...,
+         [0.26666667, 0.26666667, 0.2745098 ],
+         [0.35294118, 0.35294118, 0.36078431],
+         [0.35686275, 0.35686275, 0.36470588]],
+
+        [[0.31372549, 0.31372549, 0.32156863],
+         [0.29019608, 0.29019608, 0.29803922],
+         [0.2745098 , 0.2745098 , 0.28235294],
+         ...,
+         [0.28627451, 0.28627451, 0.29411765],
+         [0.3372549 , 0.3372549 , 0.34509804],
+         [0.36862745, 0.36862745, 0.37647059]],
+
+        [[0.30196078, 0.30196078, 0.30196078],
+         [0.23921569, 0.23921569, 0.25098039],
+         [0.26666667, 0.26666667, 0.2745098 ],
+         ...,
+         [0.30980392, 0.30980392, 0.31764706],
+         [0.40392157, 0.40392157, 0.41176471],
+         [0.38823529, 0.38823529, 0.39607843]]],
+
+
+       ...,
+
+
+       [[[0.13333333, 0.13333333, 0.13333333],
+         [0.12156863, 0.12156863, 0.12156863],
+         [0.12941176, 0.12941176, 0.12941176],
+         ...,
+         [0.40392157, 0.40392157, 0.40392157],
+         [0.39607843, 0.39607843, 0.39607843],
+         [0.39607843, 0.39607843, 0.39607843]],
+
+        [[0.15294118, 0.15294118, 0.15294118],
+         [0.15686275, 0.15686275, 0.15686275],
+         [0.14509804, 0.14509804, 0.14509804],
+         ...,
+         [0.40784314, 0.40784314, 0.40784314],
+         [0.40784314, 0.40784314, 0.40784314],
+         [0.40784314, 0.40784314, 0.40784314]],
+
+        [[0.21568627, 0.21568627, 0.21568627],
+         [0.17647059, 0.17647059, 0.17647059],
+         [0.16862745, 0.16862745, 0.16862745],
+         ...,
+         [0.40392157, 0.40392157, 0.40392157],
+         [0.45098039, 0.45098039, 0.45098039],
+         [0.44313725, 0.44313725, 0.44313725]],
+
+        ...,
+
+        [[0.08627451, 0.08627451, 0.08627451],
+         [0.09019608, 0.09019608, 0.09019608],
+         [0.08235294, 0.08235294, 0.08235294],
+         ...,
+         [0.03529412, 0.03529412, 0.03529412],
+         [0.04705882, 0.04705882, 0.04705882],
+         [0.04705882, 0.04705882, 0.04705882]],
+
+        [[0.08627451, 0.08627451, 0.08627451],
+         [0.0745098 , 0.0745098 , 0.0745098 ],
+         [0.0745098 , 0.0745098 , 0.0745098 ],
+         ...,
+         [0.03921569, 0.03921569, 0.03921569],
+         [0.04705882, 0.04705882, 0.04705882],
+         [0.04313725, 0.04313725, 0.04313725]],
+
+        [[0.07843137, 0.07843137, 0.07843137],
+         [0.08627451, 0.08627451, 0.08627451],
+         [0.07058824, 0.07058824, 0.07058824],
+         ...,
+         [0.04313725, 0.04313725, 0.04313725],
+         [0.04705882, 0.04705882, 0.04705882],
+         [0.04313725, 0.04313725, 0.04313725]]],
+
+
+       [[[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]],
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]],
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]],
+
+        ...,
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]],
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]],
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]]],
+
+
+       [[[0.25490196, 0.25490196, 0.25490196],
+         [0.26666667, 0.26666667, 0.26666667],
+         [0.25882353, 0.25882353, 0.25882353],
+         ...,
+         [0.03921569, 0.03921569, 0.03921569],
+         [0.03137255, 0.03137255, 0.03137255],
+         [0.03529412, 0.03529412, 0.03529412]],
+
+        [[0.26666667, 0.26666667, 0.26666667],
+         [0.25882353, 0.25882353, 0.25882353],
+         [0.2627451 , 0.2627451 , 0.2627451 ],
+         ...,
+         [0.0745098 , 0.0745098 , 0.0745098 ],
+         [0.05098039, 0.05098039, 0.05098039],
+         [0.06666667, 0.06666667, 0.06666667]],
+
+        [[0.2627451 , 0.2627451 , 0.2627451 ],
+         [0.27058824, 0.27058824, 0.27058824],
+         [0.27058824, 0.27058824, 0.27058824],
+         ...,
+         [0.10588235, 0.10588235, 0.10588235],
+         [0.07843137, 0.07843137, 0.07843137],
+         [0.07843137, 0.07843137, 0.07843137]],
+
+        ...,
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]],
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]],
+
+        [[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         ...,
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.        ]]]])
+In [10]:
+Data_Dir="D:/chest xray/Data//"
+In [11]:
+Cimages = os.listdir(Data_Dir+"Covid")
+Nimages = os.listdir(Data_Dir+"Normal")
+In [12]:
+import matplotlib.pyplot as plt
+import cv2
+import skimage
+from skimage.transform import resize
+import numpy as np
+def plotter(i):
+    normal = cv2.imread(Data_Dir+"Normal//"+Nimages[i])
+    normal = skimage.transform.resize(normal, (150, 150, 3))
+    coronavirus = cv2.imread(Data_Dir+"Covid//"+Cimages[i])
+    coronavirus = skimage.transform.resize(coronavirus, (150, 150, 3) , mode = 'reflect')
+    pair = np.concatenate((normal, coronavirus), axis=1)
+    print("Normal Chest X-ray Vs Covid-19 Chest X-ray")
+    plt.figure(figsize=(10,5))
+    plt.imshow(pair)
+    plt.show()
+for i in range(0,5):
+    plotter(i)
+Normal Chest X-ray Vs Covid-19 Chest X-ray
+
+Normal Chest X-ray Vs Covid-19 Chest X-ray
+
+Normal Chest X-ray Vs Covid-19 Chest X-ray
+
+Normal Chest X-ray Vs Covid-19 Chest X-ray
+
+Normal Chest X-ray Vs Covid-19 Chest X-ray
+
+In [13]:
+LB = LabelBinarizer()  #Initialize label binarizer
+labels = LB.fit_transform(labels)
+labels = to_categorical(labels); print(labels)
+(X_train, X_test, Y_train, Y_test) = train_test_split(data, labels,
+    test_size=0.20, stratify=labels, random_state=42)
+trainAug = ImageDataGenerator(
+    rotation_range=15,
+    fill_mode="nearest")
+[[1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [1. 0.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]
+ [0. 1.]]
+In [16]:
+X_train.shape,X_test.shape,Y_train.shape,Y_test.shape
+Out[16]:
+((160, 224, 224, 3), (40, 224, 224, 3), (160, 2), (40, 2))
+In [17]:
+bModel = VGG16(weights="imagenet", include_top=False,input_tensor=Input(shape=(224, 224, 3)))  #base_Model
+hModel = bModel.output #head_Model
+hModel = AveragePooling2D(pool_size=(4, 4))(hModel)
+hModel = Flatten(name="flatten")(hModel)
+hModel = Dense(64, activation="relu")(hModel)
+hModel = Dropout(0.5)(hModel)
+hModel = Dense(2, activation="softmax")(hModel)
+model = Model(inputs=bModel.input, outputs=hModel)
+for layer in bModel.layers:
+    layer.trainable = False
+Downloading data from https://storage.googleapis.com/tensorflow/keras-applications/vgg16/vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5
+58892288/58889256 [==============================] - 13s 0us/step
+In [18]:
+W_grid = 4 #width
+L_grid = 4 #lenth
+fig, axes = plt.subplots(L_grid, W_grid, figsize = (25, 25)) #subplots
+axes = axes.ravel()
+n_training = len(X_train)
+for i in np.arange(0, L_grid * W_grid):
+    index = np.random.randint(0, n_training) # pick a random number
+    axes[i].imshow(X_train[index])
+    axes[i].set_title(Y_train[index])
+    axes[i].axis('off')
+    
+plt.subplots_adjust(hspace = 0.4)
+C:\anaconda\anaconda\lib\site-packages\matplotlib\text.py:1163: FutureWarning: elementwise comparison failed; returning scalar instead, but in the future will perform elementwise comparison
+  if s != self._text:
+
+In [19]:
+opt = Adam(lr=INIT_LR, decay=INIT_LR / EPOCHS)
+model.compile(loss="binary_crossentropy", optimizer=opt,metrics=["accuracy"])
+print("Compiling Starts")
+R = model.fit_generator(
+    trainAug.flow(X_train, Y_train, batch_size=BS),
+    steps_per_epoch=len(X_train) // BS,
+    validation_data=(X_test, Y_test),
+    validation_steps=len(X_test) // BS,
+    epochs=EPOCHS)
+Compiling Starts
+C:\anaconda\anaconda\lib\site-packages\tensorflow\python\keras\engine\training.py:1844: UserWarning: `Model.fit_generator` is deprecated and will be removed in a future version. Please use `Model.fit`, which supports generators.
+  warnings.warn('`Model.fit_generator` is deprecated and '
+Epoch 1/10
+20/20 [==============================] - 45s 2s/step - loss: 0.7946 - accuracy: 0.4350 - val_loss: 0.6161 - val_accuracy: 0.9000
+Epoch 2/10
+20/20 [==============================] - 42s 2s/step - loss: 0.6647 - accuracy: 0.5961 - val_loss: 0.5466 - val_accuracy: 0.9000
+Epoch 3/10
+20/20 [==============================] - 42s 2s/step - loss: 0.5305 - accuracy: 0.8372 - val_loss: 0.4772 - val_accuracy: 0.9750
+Epoch 4/10
+20/20 [==============================] - 42s 2s/step - loss: 0.4673 - accuracy: 0.8830 - val_loss: 0.4109 - val_accuracy: 0.9000
+Epoch 5/10
+20/20 [==============================] - 42s 2s/step - loss: 0.3956 - accuracy: 0.9347 - val_loss: 0.3490 - val_accuracy: 1.0000
+Epoch 6/10
+20/20 [==============================] - 42s 2s/step - loss: 0.3558 - accuracy: 0.9494 - val_loss: 0.2981 - val_accuracy: 0.9500
+Epoch 7/10
+20/20 [==============================] - 42s 2s/step - loss: 0.2734 - accuracy: 0.9674 - val_loss: 0.2517 - val_accuracy: 1.0000
+Epoch 8/10
+20/20 [==============================] - 43s 2s/step - loss: 0.2323 - accuracy: 0.9759 - val_loss: 0.2169 - val_accuracy: 1.0000
+Epoch 9/10
+20/20 [==============================] - 42s 2s/step - loss: 0.2381 - accuracy: 0.9329 - val_loss: 0.1909 - val_accuracy: 1.0000
+Epoch 10/10
+20/20 [==============================] - 47s 2s/step - loss: 0.1720 - accuracy: 0.9787 - val_loss: 0.1622 - val_accuracy: 1.0000
+In [20]:
+L = 6
+W = 5
+fig, axes = plt.subplots(L, W, figsize = (12, 12))
+axes = axes.ravel()
+y_pred = model.predict(X_test, batch_size=BS)
+for i in np.arange(0,L*W):
+    axes[i].imshow(X_test[i])
+    axes[i].set_title('Prediction = {}\n True = {}'.format(y_pred.argmax(axis=1)[i], Y_test.argmax(axis=1)[i]))
+    axes[i].axis('off')
+
+plt.subplots_adjust(wspace = 1, hspace=1)
+
+In [21]:
+from sklearn.metrics import classification_report
+y_pred = model.predict(X_test, batch_size=BS)
+y_pred = np.argmax(y_pred, axis=1)
+print(classification_report(Y_test.argmax(axis=1), y_pred,target_names=LB.classes_))
+              precision    recall  f1-score   support
+
+       Covid       1.00      1.00      1.00        20
+      Normal       1.00      1.00      1.00        20
+
+    accuracy                           1.00        40
+   macro avg       1.00      1.00      1.00        40
+weighted avg       1.00      1.00      1.00        40
+
+In [22]:
+from sklearn.metrics import accuracy_score
+accuracy_score(Y_test.argmax(axis=1),y_pred)
+Out[22]:
+1.0
+In [23]:
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(Y_test.argmax(axis=1), y_pred)
+total = sum(sum(cm))
+acc = (cm[0, 0] + cm[1, 1]) / total
+sensitivity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
+specificity = cm[1, 1] / (cm[1, 0] + cm[1, 1])
+print(cm)
+print("acc: {:.4f}".format(acc))
+print("sensitivity: {:.4f}".format(sensitivity))
+print("specificity: {:.4f}".format(specificity))
+[[20  0]
+ [ 0 20]]
+acc: 1.0000
+sensitivity: 1.0000
+specificity: 1.0000
+In [24]:
+# plot the loss
+plt.plot(R.history['loss'], label='train loss')
+plt.plot(R.history['val_loss'], label='val loss')
+plt.legend()
+plt.show()
+plt.savefig('LossVal_loss')
+
+# plot the accuracy
+plt.plot(R.history['accuracy'], label='train acc')
+plt.plot(R.history['val_accuracy'], label='val acc')
+plt.legend()
+plt.show()
+
+
+In [25]:
+model.save('Covid_model.h5')
+In [31]:
+import tensorflow as tf 
+from keras.preprocessing import image
+#from keras.models import load_model
+model = tf.keras.models.load_model('Covid_model.h5')
+from keras.applications.vgg16 import preprocess_input
+img = image.load_img('D:/chest xray/Data/Covid/1-s2.0-S1684118220300608-main.pdf-001.jpg', target_size=(224, 224)) #insert a random covid-19 x-ray image
+imgplot = plt.imshow(img)
+x = image.img_to_array(img)
+x = np.expand_dims(x, axis=0)
+img_data = preprocess_input(x)
+classes = model.predict(img_data)
+New_pred = np.argmax(classes, axis=1)
+if New_pred==[1]:
+  print('Prediction: Corona')
+else:
+  print('Prediction: Normal')
+Prediction: Corona
+
+In [32]:
+img = image.load_img('D:/chest xray/Data/Covid/1-s2.0-S1684118220300608-main.pdf-001.jpg', target_size=(224, 224)) #insert a random normal x-ray image
+imgplot = plt.imshow(img)
+x = image.img_to_array(img)
+x = np.expand_dims(x, axis=0)
+img_data = preprocess_input(x)
+classes = model.predict(img_data)
+New_pred = np.argmax(classes, axis=1)
+if New_pred==[1]:
+  print('Prediction: Corona')
+else:
+  print('Prediction: Normal')
+Prediction: Corona
+
+In [ ]:
